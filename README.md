@@ -1,6 +1,6 @@
 # Domain-Adaptive Prototype Networks (DAPN)
 
-This repository contains the official PyTorch implementation and benchmark data for **Domain-Adaptive Prototype Networks for Few-Shot Intangible Cultural Heritage Image Classification**.
+This repository contains the PyTorch implementation and benchmark data for **Domain-Adaptive Prototype Networks for Few-Shot Intangible Cultural Heritage Image Classification**.
 
 [![PyTorch](https://img.shields.io/badge/PyTorch-1.8+-EE4C2C.svg?style=flat&logo=pytorch)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -11,8 +11,6 @@ Intangible Cultural Heritage (ICH) artifact cataloging faces severe challenges d
 1. **Disentangles** images into domain-invariant content/morphological features and domain-specific style/material features.
 2. **Aligns** domain-invariant features using an adversarial domain discriminator with inverse-frequency weighting.
 3. **Refines** prototypes globally using a Graph Convolutional Network (GCN) that leverages category-to-category relationships.
-
-For a detailed description of the model and experimental results, please refer to our paper.
 
 ---
 
@@ -110,21 +108,6 @@ python scripts/evaluate.py \
 * **Inverse-Frequency Adversarial Weighting**: Domain discriminators align $\mathbf{f}_{inv}$ across domains. Class-domain inverse frequency weighting balances discriminator gradients, preventing dominant domain-class pairs from biasing the encoder.
 * **Graph Regularization Loss**: Applies a Dirichlet energy loss over the category prototypes to smooth prototypes according to their semantic relationships:
   $$\mathcal{L}_{graph} = \sum_{i < j} A_{ij} \|\mathbf{p}_i - \mathbf{p}_j\|^2$$
-
----
-
-## 📄 Citation
-
-If you find this repository useful in your research, please cite our paper:
-
-```bibtex
-@article{dapn2025,
-  title={Domain-Adaptive Prototype Networks for Few-Shot Intangible Cultural Heritage Image Classification},
-  author={Nie, Yan and Xu, Guanghao and Qiu, Jing and Wang, Yunqian},
-  journal={IEEE Transactions on Neural Networks and Learning Systems},
-  year={2025}
-}
-```
 
 ---
 
