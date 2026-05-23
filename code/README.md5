@@ -1,0 +1,269 @@
+# Domain-Adaptive Prototype Networks
+
+A PyTorch implementation for few-shot image classification under domain shift. This framework addresses the challenge of learning effective classifiers from very few examples when training and test data come from different domains.
+
+## Overview
+
+The core insight is that standard prototype-based methods can fail under domain shift because prototypes get "contaminated" by domain-specific features (material properties, regional styles, imaging conditions, etc.). This implementation separates domain-invariant features from domain-specific ones, computing prototypes only from the invariant component. A graph neural network then refines prototypes by leveraging relationships between categories.
+
+## Project Structure
+
+```
+code/
+├── configs/
+│   ├── __init__.py
+│   └── config.py          # Configuration dataclasses
+├── data/
+│   ├── __init__.py
+│   ├── datasets.py        # Dataset implementations
+│   └── sampler.py         # Episode sampling for few-shot learning
+├── models/
+│   ├── __init__.py
+│   ├── backbone.py        # ResNet-12 feature extractor
+│   ├── disentangle.py     # Feature disentanglement module
+│   ├── discriminator.py   # Domain discriminator with gradient reversal
+│   ├── gnn.py             # Graph neural network for prototype refinement
+│   └── dapn.py            # Complete model integration
+├── training/
+│   ├── __init__.py
+│   └── trainer.py         # Training loop and optimization
+├── evaluation/
+│   ├── __init__.py
+│   └── evaluator.py       # Evaluation protocols
+├── utils/
+│   ├── __init__.py
+│   ├── metrics.py         # Accuracy computation and statistics
+│   └── checkpointing.py   # Model saving and loading
+├── train.py               # Training entry point
+├── evaluate.py            # Evaluation entry point
+└── README.md5             # This file
+```
+
+## Installation
+
+### Requirements
+
+- Python 3.8+
+- PyTorch 1.10+
+- torchvision
+- numpy
+- scipy
+- scikit-learn (for evaluation probes)
+- PIL
+- PyYAML
+
+Install dependencies:
+
+```bash
+pip install torch torchvision numpy scipy scikit-learn pillow pyyaml
+```
+
+## Data Preparation
+
+### Dataset Directory Structure
+
+The expected format for datasets:
+
+```
+data/
+├── ich_benchmark/
+│   ├── train/
+│   │   ├── class_name_1/
+│   │   │   ├── northern/
+│   │   │   │   └── *.jpg
+│   │   │   ├── southern/
+│   │   │   ├── eastern/
+│   │   │   └── western/
+│   │   └── class_name_2/
+│   │       └── ...
+│   ├── val/
+│   └── test/
+├── mini_imagenet/
+│   ├── train/
+│   ├── val/
+│   └── test/
+└── tiered_imagenet/
+    └── ...
+```
+
+For datasets without domain labels (mini-ImageNet, tiered-ImageNet), images can be placed directly in class folders without domain subdirectories.
+
+## Training
+
+### Quick Start
+
+Train a 5-way 1-shot model:
+
+```bash
+python train.py \
+    --dataset ich_benchmark \
+    --data_root ./data \
+    --n_way 5 \
+    --k_shot 1 \
+    --epochs 100 \
+    --name my_experiment
+```
+
+### Using Configuration Files
+
+Create a YAML config or modify the defaults:
+
+```bash
+python train.py --config configs/my_config.yaml
+```
+
+### Key Training Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--dataset` | ich_benchmark | Dataset name |
+| `--n_way` | 5 | Classes per episode |
+| `--k_shot` | 1 | Support examples per class |
+| `--epochs` | 100 | Training epochs |
+| `--lr` | 1e-4 | Learning rate |
+| `--lambda_adv` | 0.5 | Adversarial loss weight |
+| `--lambda_dis` | 0.3 | Disentanglement loss weight |
+| `--alpha_graph` | 0.1 | Graph refinement weight |
+
+### Training Output
+
+Training creates:
+- `outputs/<name>/config.yaml` - Saved configuration
+- `outputs/<name>/train.log` - Training log
+- `outputs/<name>/checkpoint_epoch_*.pt` - Periodic checkpoints
+- `outputs/<name>/best_model.pt` - Best validation model
+
+## Evaluation
+
+### Standard Evaluation
+
+```bash
+python evaluate.py \
+    --checkpoint outputs/my_experiment/best_model.pt \
+    --n_episodes 600
+```
+
+### Cross-Domain Evaluation
+
+Tests generalization when support and query come from different domains:
+
+```bash
+python evaluate.py \
+    --checkpoint outputs/my_experiment/best_model.pt \
+    --cross_domain \
+    --n_episodes 600
+```
+
+### Ablation Study
+
+Evaluates model variants:
+
+```bash
+python evaluate.py \
+    --checkpoint outputs/my_experiment/best_model.pt \
+    --ablation
+```
+
+### Disentanglement Validation
+
+Validates quality of feature separation:
+
+```bash
+python evaluate.py \
+    --checkpoint outputs/my_experiment/best_model.pt \
+    --disentangle
+```
+
+Good disentanglement means:
+- Domain classification from invariant features ≈ 25% (chance for 4 domains)
+- Domain classification from specific features → high
+- Class classification from invariant features → high
+- Class classification from specific features → low
+
+### Save Results
+
+```bash
+python evaluate.py \
+    --checkpoint outputs/my_experiment/best_model.pt \
+    --cross_domain --ablation --disentangle \
+    --output results/evaluation_results.json
+```
+
+## Model Architecture
+
+### Components
+
+1. **Backbone (ResNet-12)**: Extracts 512-dimensional features from input images.
+
+2. **Feature Disentangler**: Splits features into:
+   - Invariant branch (256-d): Class-discriminative, domain-agnostic
+   - Specific branch (256-d): Captures domain variations
+
+3. **Domain Discriminator**: Classifies domain from invariant features.
+   Uses gradient reversal to encourage domain invariance.
+
+4. **Graph Neural Network**: Refines prototypes by propagating information
+   between related categories based on feature similarity.
+
+### Loss Functions
+
+- **Task loss**: Cross-entropy on query predictions
+- **Adversarial loss**: Domain classification (with gradient reversal)
+- **Orthogonality loss**: Enforces separation between branches
+- **Reconstruction loss**: Ensures complete information preservation
+- **Graph regularization**: Encourages sparse, structured graphs
+
+## Hyperparameters
+
+Based on experimental validation:
+
+| Parameter | Recommended | Notes |
+|-----------|-------------|-------|
+| `lambda_adv` | 0.5 | Higher values increase domain invariance but may hurt class discrimination |
+| `lambda_dis` | 0.3 | Controls disentanglement strength |
+| `alpha_graph` | 0.1 | Small values work best; prototypes should primarily come from support examples |
+| Learning rate | 1e-4 | Lower for backbone (0.1x) |
+| Backbone | ResNet-12 | Standard for few-shot learning |
+
+## Extending the Code
+
+### Adding a New Dataset
+
+1. Create a class in `data/datasets.py` inheriting from `FewShotDataset`
+2. Implement `_load_data()` to populate `self.samples`, `self.labels`, `self.domain_labels`
+3. Register in `get_dataset()` factory function
+
+### Adding a New Backbone
+
+1. Implement in `models/backbone.py`
+2. Ensure output is a fixed-size feature vector
+3. Update `DAPN.__init__()` to use your backbone
+
+### Custom Evaluation Metrics
+
+Add metric functions to `utils/metrics.py` and call them from `evaluation/evaluator.py`.
+
+## Common Issues
+
+### Out of Memory
+
+- Reduce `n_query` or batch size
+- Use gradient checkpointing (add to backbone)
+- Reduce GNN layers
+
+### Low Accuracy
+
+- Ensure dataset has sufficient samples per class
+- Check domain labels are correctly assigned
+- Try adjusting lambda weights
+- Verify image preprocessing matches training
+
+### Training Instability
+
+- Reduce learning rate
+- Increase gradient clipping (currently 5.0)
+- Check for data loading issues
+
+## License
+
+For research and educational purposes only.
